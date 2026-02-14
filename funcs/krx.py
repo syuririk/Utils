@@ -240,7 +240,8 @@ class Krx:
               ohlcv = ohlcv.reset_index().rename(columns={
                   "날짜": "date", "시가": "open", "고가": "high", "저가": "low", "종가": "close", "거래량": "volume",
               })
-              ohlcv = ohlcv[['date', 'code', 'open', 'high', 'low', 'close', 'volume']]
+              ohlcv = ohlcv[['date', 'open', 'high', 'low', 'close', 'volume']]
+              ohlcv['code'] = code
             except:
               try:
                 ohlcv = stock.get_index_ohlcv_by_date(start[2:], end[2:], code).reset_index()
