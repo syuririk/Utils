@@ -41,7 +41,7 @@ def get_req(url):
   if response.status_code == 200:
     data = response.json()
   else:
-    print(f"API 요청 실패: {response.status_code}")
+    raise ValueError(f"API request failed with status code: {response.status_code}")
   return data
 
 def search_stat_code(keyword):
