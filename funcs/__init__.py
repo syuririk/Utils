@@ -1,4 +1,1 @@
-import requests
-import pandas as pd
-import re
-
+print("funcs package initialized")
