@@ -1,1 +1,3 @@
-print("funcs package initialized")
+from .ecos import EcosAPI
+
+__all__ = ["EcosAPI"]
