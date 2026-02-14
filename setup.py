@@ -9,7 +9,7 @@ with open(here / "requirements.txt") as f:
 setup(
     name="get_data",
     version="0.1.0",
-    packages=find_packages(include=["funcs", "funcs.*"]),  # funcs 폴더 포함
+    packages=find_packages(include=["funcs", "funcs.*"]), 
     include_package_data=True,
     install_requires=requirements,
     description="Get data from ECOS",

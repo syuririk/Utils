@@ -218,7 +218,7 @@ class Krx:
         Behavior
         --------
         1. Compress overlapping periods per ticker.
-        2. Retrieve OHLCV for each ticker using stock.get_market_ohlcv_by_date.
+        2. Retrieve OHLCV for each ticker using stock.get_market_ohlcv_by_date or stock.get_index_ohlcv_by_date.
         3. Normalize column names.
         4. Concatenate all tickers into one long DataFrame.
         5. Sort by date and code.
@@ -251,8 +251,6 @@ class Krx:
                 ohlcv['code'] = code
               except:
                 raise KeyError(f"Can't find code : {code}")
-
-            ohlcv['code'] = code
             
             all_dfs.append(ohlcv)
 
