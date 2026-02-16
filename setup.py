@@ -21,10 +21,6 @@ setup(
     include_package_data=True,
     install_requires=requirements,
 
-    extras_require={
-        "krx": ["pykrx>=1.0.41"]
-    },
-
     description="utils",
     long_description=(here / "README.md").read_text(encoding="utf-8")
         if (here / "README.md").exists() else "",
