@@ -13,7 +13,7 @@ class Krx:
         Initialize the Krx class by fetching tickers, index tickers, and sector information.
         Sets the most recent business day.
         """
-        
+        self.last_Bday = stock.get_nearest_business_day_in_a_week()
 
         self.KOSPI_stocks = stock.get_market_ticker_list(market="KOSPI")
         self.KOSDAQ_stocks = stock.get_market_ticker_list(market="KOSDAQ")
@@ -25,11 +25,13 @@ class Krx:
         self.KRX_idx = stock.get_index_ticker_list(market="KRX")
         self.theme_idx = stock.get_index_ticker_list(market="테마")
 
-        self.last_Bday = stock.get_nearest_business_day_in_a_week()
         self.KOSPI_sector = stock.get_market_sector_classifications(date=self.last_Bday, market="KOSPI")
         self.KOSDAQ_sector = stock.get_market_sector_classifications(date=self.last_Bday, market="KOSDAQ")
 
-    def overview_tickers(self, tickers=list):
+        self.ETF_list = stock.get_etf_ticker_list()
+        
+
+    def getName(self, tickers=list, print_names=False):
         """
         Print the names of the provided tickers.
         
@@ -38,19 +40,30 @@ class Krx:
         tickers : list of str
             A list of ticker codes.
 
+        Returns
+        -------
+        dict
+            A dictionary mapping ticker codes to their corresponding names.
+
         Behavior
         --------
         1. Attempts to print the index ticker names.
         2. If not an index, prints the market ticker names.
         """
-        try:
-            for ticker in tickers:
-                print(ticker, stock.get_index_ticker_name(ticker))
-        except:
-            for ticker in tickers:
-                print(ticker, stock.get_market_ticker_name(ticker))
+        result = {}
+        for ticker in tickers:
+            try:
+              result[ticker] = stock.get_etf_ticker_name(ticker)
+            except:
+              try:
+                result[ticker] = stock.get_index_ticker_name(ticker)
+              except:
+                result[ticker] = stock.get_market_ticker_name(ticker)
+            if print_names:
+                print(ticker, result[ticker])
+        return result
 
-    def build_ticker_periods(self, df=pd.DataFrame):
+    def BuildActivePeriod(self, df=pd.DataFrame):
         """
         Calculate active periods (start to end) for each ticker based on added/removed records.
         
@@ -96,7 +109,7 @@ class Krx:
 
         return pd.DataFrame(results).sort_values(["code","start"])
   
-    def compress_periods(self, df=pd.DataFrame):
+    def compressPeriod(self, df=pd.DataFrame):
         """
         Compress multiple periods of the same ticker into a single period with minimum start and maximum end.
 
@@ -116,7 +129,7 @@ class Krx:
         """
         return df.groupby("code", as_index=False).agg(start=("start","min"), end=("end","max")).sort_values("code")
 
-    def get_index_deposit(self, ticker=str, start_date=str, end_date=str):
+    def generateIndexDeposit(self, ticker=str, start_date=str, end_date=str):
         """
         Retrieve component changes for a given index ticker and calculate active periods.
 
@@ -152,11 +165,9 @@ class Krx:
             try:
                 cur_set = set(stock.get_index_portfolio_deposit_file(ticker=ticker, date=date_str))
             except Exception:
-                print(f"      {d}")
                 continue
 
             if not cur_set:
-                print(f"      {d}")
                 continue
 
             if prev_set is None:
@@ -167,11 +178,9 @@ class Krx:
                     "removed": []
                 })
                 prev_set = cur_set
-                print(f"{d}")
                 continue
 
             if cur_set == prev_set:
-                print(f"  {d}")
                 continue
 
             added = cur_set - prev_set
@@ -184,7 +193,6 @@ class Krx:
                 "removed": sorted(removed)
             })
             prev_set = cur_set
-            print(f"{d}")
 
         last_bday_str = end_date
         if records and records[-1]["date"] != last_bday_str:
@@ -204,7 +212,7 @@ class Krx:
 
   
 
-    def get_combined_ohlcv(self, df=pd.DataFrame):
+    def generateohlcv(self, df=pd.DataFrame):
         """
         Combine OHLCV data for all tickers in a long format based on code and active periods.
 
@@ -234,7 +242,7 @@ class Krx:
         df['orig_start'] = df['start']
         df['orig_end'] = df['end']
 
-        df_compressed = self.compress_periods(df)
+        df_compressed = self.compressPeriod(df)
 
         all_dfs = []
         code_len = len(list(df_compressed.iterrows()))
@@ -252,6 +260,7 @@ class Krx:
             ohlcv = stock.get_market_ohlcv_by_date(start, end, code)
 
             ohlcv = ohlcv.reset_index().rename(columns={
+                "날짜": "date",
                 "시가": "open",
                 "고가": "high",
                 "저가": "low",
@@ -259,8 +268,7 @@ class Krx:
                 "거래량": "volume",
             })
             ohlcv['code'] = code
-            ohlcv = ohlcv[['날짜', 'code', 'open', 'high', 'low', 'close', 'volume']]
-            ohlcv = ohlcv.rename(columns={'날짜':'date'})
+            ohlcv = ohlcv[['date', 'code', 'open', 'high', 'low', 'close', 'volume']]
             ohlcv['date'] = pd.to_datetime(ohlcv['date'])
 
             periods = df[df['code'] == code][['orig_start','orig_end']]
@@ -277,7 +285,7 @@ class Krx:
         final_df = final_df.sort_values(['date', 'code']).reset_index(drop=True)
         return final_df
 
-    def get_ohlcv_list(self, tickers=list, start_date=str, end_date=str):
+    def getohlcv(self, tickers=list, start_date=str, end_date=str):
         """
         Generate a long-format OHLCV DataFrame for a list of tickers over a specified date range.
 
@@ -309,7 +317,7 @@ class Krx:
         })
         df = self.get_combined_ohlcv(com_df)
         return df
-    def get_index_deposit_df(self, ticker=str, start_date=str, end_date=str):
+    def getIndexDeposit(self, ticker=str, start_date=str, end_date=str):
       """
       Retrieve component changes for a given index ticker and calculate active periods.
 
@@ -333,6 +341,25 @@ class Krx:
       2. Calls get_combined_ohlcv to fetch and combine OHLCV data for all tickers.
       3. Returns the resulting long-format DataFrame.
       """
-      pdf = self.get_index_deposit(ticker, start_date, end_date)
-      df = self.get_combined_ohlcv(pdf)
+      pdf = self.generateIndexDeposit(ticker, start_date, end_date)
+      df = self.generateohlcv(pdf)
       return df
+
+    def getDepositTickers(self, ticker=str):
+      """
+      """
+      deposit = stock.get_index_portfolio_deposit_file(ticker=ticker)
+      if not deposit:
+        deposit = stock.get_etf_portfolio_deposit_file(ticker=ticker)
+      return deposit
+
+    def getETFfromName(self, keyword=str, print_val=False):
+      """
+      """
+      result = []
+      for t, n in list(krx.getName(krx.ETF_list).items()):
+        if keyword in n:
+          result.append([t, n])
+          if print_val:
+            print(t, n)
+      return result

@@ -2,7 +2,7 @@ import requests
 import pandas as pd
 import re
 
-class ECOS:
+class Ecos:
     def __init__(self, key):
         self.key = key
 

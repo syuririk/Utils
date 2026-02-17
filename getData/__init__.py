@@ -1,4 +1,4 @@
-from .ecos import ECOS
+from .ecos import Ecos
 from .krx import Krx
 
-__all__ = ["EcosAPI", "Krx"]
+__all__ = ["Ecos", "Krx"]
