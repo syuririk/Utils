@@ -1,5 +1,3 @@
-from typing import Callable
-
 import numpy as np
 import pandas as pd
 
@@ -10,24 +8,31 @@ from . import DataProcessUtils
 # Basic factor generators
 # ======================================================================
 
-def ratio_factor(numer, denom) -> Callable[[pd.DataFrame], pd.Series]:
-    def factor(df: pd.DataFrame) -> pd.Series:
+def ratioFactor(numer, denom):
+    def factor(df):
         if isinstance(numer, (int, float)):
-            return processUtils.safe_div(numer, df[denom])
-        return processUtils.safe_div(df[numer], df[denom])
+            return safe_div(numer, df[denom])
+        return safe_div(df[numer], df[denom])
     return factor
 
-
-def pct_change_factor(code, col, periods, date_col=None):
-    def factor(df: pd.DataFrame) -> pd.Series:
+def returnFactor(code, col, period, subtract=None, date_col=None):
+    def factor(df):
         if date_col:
             df = df.sort_values(date_col)
-        return df.groupby(code, sort=False)[col].pct_change(periods, fill_method=None)
+
+        g = df.groupby(code)[col]
+        base = g.pct_change(period)
+
+        if subtract:
+            base -= g.pct_change(subtract)
+
+        return base.replace([np.inf, -np.inf], np.nan)
+
     return factor
 
 
-def rolling_stat_factor(code, col, window, stat="mean"):
-    def factor(df: pd.DataFrame) -> pd.Series:
+def rollingStatFactor(code, col, window, stat="mean"):
+    def factor(df):
         g = df.groupby(code, sort=False)[col]
 
         if stat == "mean":
@@ -41,34 +46,29 @@ def rolling_stat_factor(code, col, window, stat="mean"):
 
     return factor
 
+def logFactor(col):
+    def factor(df):
+        return np.log(df[col])
+    return factor
 
-def momentum_factor(code, col, period, subtract_period=None):
-    def factor(df: pd.DataFrame) -> pd.Series:
+def maCrossFactor(code, col, short=5, long=60, method="ratio"):
+    def factor(df):
         g = df.groupby(code, sort=False)[col]
-        base = g.pct_change(period, fill_method=None)
+        short_ma = g.rolling(short).mean().reset_index(level=0, drop=True)
+        long_ma = g.rolling(long).mean().reset_index(level=0, drop=True)
 
-        if subtract_period is not None:
-            return base - g.pct_change(subtract_period, fill_method=None)
-
-        return base.replace([np.inf, -np.inf], np.nan).astype(float)
-
+        if method == "ratio":
+            return safe_div(short_ma, long_ma)
+        elif method == "diff":
+            return short_ma - long_ma
+        elif method == "signal":
+            return (short_ma > long_ma).astype("float32")
+        else:
+            raise ValueError("method must be ratio | diff | signal")
     return factor
 
-
-def ma_factor(code, col, window):
-    def factor(df: pd.DataFrame) -> pd.Series:
-        return df.groupby(code, sort=False)[col].transform(
-            lambda x: x.rolling(window).mean()
-        )
-    return factor
-
-
-# ======================================================================
-# Volatility / Liquidity factors
-# ======================================================================
-
-def parkinson_vol_factor(code, high, low, window=21):
-    def factor(df: pd.DataFrame) -> pd.Series:
+def parkinsonVolFactor(code, high, low, window=21):
+    def factor(df):
         hl = np.log(df[high] / df[low]) ** 2
 
         return (
@@ -81,58 +81,41 @@ def parkinson_vol_factor(code, high, low, window=21):
         )
     return factor
 
-
-def volume_surge_factor(code, volume, short=5, long=60):
-    def factor(df: pd.DataFrame) -> pd.Series:
-        v = df.groupby(code, sort=False)[volume]
-        short_ma = v.rolling(short).mean().reset_index(level=0, drop=True)
-        long_ma = v.rolling(long).mean().reset_index(level=0, drop=True)
-        return processUtils.safe_div(short_ma, long_ma)
-    return factor
-
-
-def amihud_factor(code, price, amount):
-    def factor(df: pd.DataFrame) -> pd.Series:
+def amihudFactor(code, price, amount):
+    def factor(df):
         ret = df.groupby(code, sort=False)[price].pct_change(fill_method=None).abs()
-        return processUtils.safe_div(ret, df[amount])
+        return safe_div(ret, df[amount])
     return factor
 
+def compareFactor(left, right, op="gt"):
+    def factor(df):
+        l = df[left] if isinstance(left, str) else left
+        r = df[right] if isinstance(right, str) else right
 
-# ======================================================================
-# Fundamental factors
-# ======================================================================
-
-def log_factor(col):
-    def factor(df: pd.DataFrame) -> pd.Series:
-        return np.log(df[col])
+        if op == "gt":
+            out = l > r
+        elif op == "ge":
+            out = l >= r
+        elif op == "eq":
+            out = l == r
+        elif op == "ne":
+            out = l != r
+        else:
+            raise ValueError("op must be gt | ge | eq | ne")
+        return out.astype(int)
     return factor
-
-
-def accrual_factor(net_income, cfo, assets):
-    def factor(df: pd.DataFrame) -> pd.Series:
-        return processUtils.safe_div(df[net_income] - df[cfo], df[assets])
-    return factor
-
-
-def ev_ebit_factor(marcap, debt, assets, ebit):
-    def factor(df: pd.DataFrame) -> pd.Series:
-        cash_proxy = df[assets] - df[debt]
-        ev = df[marcap] + df[debt] - cash_proxy
-        return processUtils.safe_div(ev, df[ebit])
-    return factor
-
 
 # ======================================================================
 # Utilities
 # ======================================================================
 
-def cs_zscore(df, col, eps=1e-8):
+def csZscore(df, col, eps=1e-8):
     return df.groupby("Date")[col].transform(
         lambda x: (x - x.mean()) / (x.std() + eps)
     )
 
 
-def compute_factors(df, factor_dict, zscore=True, columns=None):
+def computeFactors(df, factor_dict, zscore=True, columns=None):
 
     if columns is None:
         columns = []
@@ -147,7 +130,7 @@ def compute_factors(df, factor_dict, zscore=True, columns=None):
 
         if zscore:
             zname = f"{name}_Z"
-            df[zname] = cs_zscore(df, name).astype("float32")
+            df[zname] = csZscore(df, name).astype("float32")
             columns.append(zname)
 
     return df[columns]
