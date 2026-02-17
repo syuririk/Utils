@@ -105,6 +105,17 @@ def compareFactor(left, right, op="gt"):
         return out.astype(int)
     return factor
 
+def rollingZscoreFactor(code, col, window, eps=1e-8):
+    def factor(df):
+        g = df.groupby(code, sort=False)[col]
+
+        mean = g.rolling(window).mean().reset_index(level=0, drop=True)
+        std = g.rolling(window).std().reset_index(level=0, drop=True)
+
+        return ((df[col] - mean) / (std + eps)).astype("float32")
+    return factor
+
+    
 # ======================================================================
 # Utilities
 # ======================================================================
@@ -113,6 +124,7 @@ def csZscore(df, col, eps=1e-8, date_col="date"):
     return df.groupby(date_col)[col].transform(
         lambda x: (x - x.mean()) / (x.std() + eps)
     )
+
 
 
 def computeFactors(df, factor_dict, zscore=True, date_col="date"):
