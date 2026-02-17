@@ -109,28 +109,22 @@ def compareFactor(left, right, op="gt"):
 # Utilities
 # ======================================================================
 
-def csZscore(df, col, eps=1e-8):
-    return df.groupby("Date")[col].transform(
+def csZscore(df, col, eps=1e-8, date_col):
+    return df.groupby(date_col)[col].transform(
         lambda x: (x - x.mean()) / (x.std() + eps)
     )
 
 
-def computeFactors(df, factor_dict, zscore=True, columns=None):
-
-    if columns is None:
-        columns = []
-
+def computeFactors(df, factor_dict, zscore=True, date_col=date):
     for i, (name, func) in enumerate(factor_dict.items(), 1):
         print(name, end="    ")
         if i % 5 == 0:
             print()
 
         df[name] = func(df).astype("float32")
-        columns.append(name)
 
         if zscore:
             zname = f"{name}_Z"
-            df[zname] = csZscore(df, name).astype("float32")
-            columns.append(zname)
+            df[zname] = csZscore(df, name, date_col=date).astype("float32")
 
-    return df[columns]
+    return df

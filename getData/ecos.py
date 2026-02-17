@@ -443,6 +443,7 @@ class Ecos:
 
         df = pd.concat(dfs, axis=1)
         df = df.reset_index()
+        df = df.rename(columns={"TIME":"Date"})
         if return_detail:
           return df, details
         else:
