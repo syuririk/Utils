@@ -68,6 +68,9 @@ class Fred():
     except:
       raise Exception("Invalid JSON response")
 
+    if type(data) == NoneType:
+      data = {}
+      
     return data
 
 
