@@ -5,13 +5,27 @@ from pykrx import stock
 
 class Krx:
     """
-    class for KRX with PyKrx.
+    Wrapper class for retrieving and processing Korea Exchange (KRX) market data using PyKrx.
+
+    This class provides utilities for:
+    - ticker and index lookup
+    - ETF and sector information
+    - index component history
+    - OHLCV retrieval
+    - active period tracking for securities
+
+    Notes
+    -----
+    - Uses PyKrx as the underlying data source.
+    - All dates must be provided as YYYYMMDD strings unless otherwise stated.
     """
 
     def __init__(self):
         """
-        Initialize the Krx class by fetching tickers, index tickers, and sector information.
-        Sets the most recent business day.
+        Initialize KRX environment data.
+
+        Fetches ticker lists, index lists, sector classifications,
+        ETF lists, and determines the most recent business day.
         """
         self.last_Bday = stock.get_nearest_business_day_in_a_week()
 
@@ -29,68 +43,74 @@ class Krx:
         self.KOSDAQ_sector = stock.get_market_sector_classifications(date=self.last_Bday, market="KOSDAQ")
 
         self.ETF_list = stock.get_etf_ticker_list()
-        
+
 
     def getName(self, tickers=list, print_names=False):
         """
-        Print the names of the provided tickers.
-        
+        Retrieve ticker names.
+
         Parameters
         ----------
-        tickers : list of str
-            A list of ticker codes.
+        tickers : list[str]
+            List of ticker codes.
+
+        print_names : bool, default=False
+            If True, prints ticker and name.
 
         Returns
         -------
         dict
-            A dictionary mapping ticker codes to their corresponding names.
+            Mapping {ticker: name}
 
         Behavior
         --------
-        1. Attempts to print the index ticker names.
-        2. If not an index, prints the market ticker names.
+        Attempts lookup in order:
+        1. ETF ticker name
+        2. Index ticker name
+        3. Market ticker name
         """
         result = {}
         for ticker in tickers:
             try:
-              result[ticker] = stock.get_etf_ticker_name(ticker)
+                result[ticker] = stock.get_etf_ticker_name(ticker)
             except:
-              try:
-                result[ticker] = stock.get_index_ticker_name(ticker)
-              except:
-                result[ticker] = stock.get_market_ticker_name(ticker)
+                try:
+                    result[ticker] = stock.get_index_ticker_name(ticker)
+                except:
+                    result[ticker] = stock.get_market_ticker_name(ticker)
+
             if print_names:
                 print(ticker, result[ticker])
+
         return result
+
 
     def BuildActivePeriod(self, df=pd.DataFrame):
         """
-        Calculate active periods (start to end) for each ticker based on added/removed records.
-        
+        Construct active periods for tickers from add/remove history.
+
         Parameters
         ----------
         df : pd.DataFrame
-            DataFrame containing columns: date, added, removed, codes.
+            Must contain columns:
+            date, added, removed, codes
 
         Returns
         -------
         pd.DataFrame
-            Columns: code, start, end representing active period of each ticker.
+            Columns: code, start, end
 
         Behavior
         --------
-        1. Converts 'added' and 'removed' to list if stored as string.
-        2. Iterates over each date to track active tickers.
-        3. Stores each active period when a ticker is removed.
-        4. Extends active tickers to the last date.
+        Tracks ticker inclusion over time and records start/end dates
+        for each active period.
         """
-        df = df.reset_index() 
+        df = df.reset_index()
         df["added"] = df["added"].apply(lambda x: ast.literal_eval(x) if isinstance(x,str) else x)
         df["removed"] = df["removed"].apply(lambda x: ast.literal_eval(x) if isinstance(x,str) else x)
         df["date"] = pd.to_datetime(df["date"].astype(str))
 
-        df = df.sort_values("date").set_index("date")
-        df = df.sort_index()
+        df = df.sort_values("date").set_index("date").sort_index()
 
         active = {}
         results = []
@@ -108,53 +128,54 @@ class Krx:
             results.append({"code": code, "start": start, "end": last_date})
 
         return pd.DataFrame(results).sort_values(["code","start"])
-  
+
+
     def compressPeriod(self, df=pd.DataFrame):
         """
-        Compress multiple periods of the same ticker into a single period with minimum start and maximum end.
+        Merge multiple active periods per ticker into a single range.
 
         Parameters
         ----------
         df : pd.DataFrame
-            DataFrame containing columns: code, start, end.
+            Columns: code, start, end
 
         Returns
         -------
         pd.DataFrame
-            Compressed DataFrame with columns: code, start, end.
+            Aggregated period per ticker.
 
         Behavior
         --------
-        Groups by code and aggregates the minimum start and maximum end for each ticker.
+        Groups by code and takes:
+        - minimum start
+        - maximum end
         """
-        return df.groupby("code", as_index=False).agg(start=("start","min"), end=("end","max")).sort_values("code")
+        return df.groupby("code", as_index=False).agg(
+            start=("start","min"),
+            end=("end","max")
+        ).sort_values("code")
+
 
     def generateIndexDeposit(self, ticker=str, start_date=str, end_date=str):
         """
-        Retrieve component changes for a given index ticker and calculate active periods.
+        Generate index component membership periods.
 
         Parameters
         ----------
         ticker : str
-            Index ticker code.
+            Index ticker.
+
         start_date : str
-            Start date in "YYYYMMDD".
         end_date : str
-            End date in "YYYYMMDD".
 
         Returns
         -------
         pd.DataFrame
-            Columns: code, start, end showing active periods of components.
+            Columns: code, start, end
 
         Behavior
         --------
-        1. Generates a list of business days between start_date and end_date.
-        2. Retrieves current index components for each date.
-        3. Determines added or removed tickers compared to the previous date.
-        4. Stores each change as a record.
-        5. Extends the last record to end_date.
-        6. Returns a DataFrame with active periods for each component.
+        Tracks daily component changes and builds active membership periods.
         """
         dates = pd.date_range(start_date, end_date, freq="B")
         records = []
@@ -164,7 +185,7 @@ class Krx:
             date_str = d.strftime("%Y%m%d")
             try:
                 cur_set = set(stock.get_index_portfolio_deposit_file(ticker=ticker, date=date_str))
-            except Exception:
+            except:
                 continue
 
             if not cur_set:
@@ -207,37 +228,35 @@ class Krx:
             return pd.DataFrame(columns=["codes","added","removed"])
 
         df = pd.DataFrame.from_records(records).set_index("date")
-        ticker_period = self.build_ticker_periods(df=df)
+        ticker_period = self.BuildActivePeriod(df=df)
         return ticker_period
 
-  
 
     def generateohlcv(self, df=pd.DataFrame):
         """
-        Combine OHLCV data for all tickers in a long format based on code and active periods.
+        Retrieve OHLCV data for multiple tickers and merge into long format.
 
         Parameters
         ----------
         df : pd.DataFrame
-            DataFrame with columns: code, start, end.
+            Columns: code, start, end
 
         Returns
         -------
         pd.DataFrame
-            Long-format OHLCV DataFrame with columns:
-            date, code, open, high, low, close, volume.
+            Columns:
+            date, code, open, high, low, close, volume
 
         Behavior
         --------
-        1. Compress overlapping periods per ticker.
-        2. Retrieve OHLCV for each ticker using stock.get_market_ohlcv_by_date or stock.get_index_ohlcv_by_date.
-        3. Normalize column names.
-        4. Concatenate all tickers into one long DataFrame.
-        5. Sort by date and code.
+        1. Compresses overlapping ticker periods.
+        2. Downloads OHLCV per ticker.
+        3. Filters by original periods.
+        4. Concatenates all tickers.
+        5. Sorts by date and code.
         """
-
         if df.empty:
-            return pd.DataFrame(columns=['date', 'code', 'open', 'high', 'low', 'close', 'volume'])
+            return pd.DataFrame(columns=['date','code','open','high','low','close','volume'])
 
         df['orig_start'] = df['start']
         df['orig_end'] = df['end']
@@ -260,106 +279,111 @@ class Krx:
             ohlcv = stock.get_market_ohlcv_by_date(start, end, code)
 
             ohlcv = ohlcv.reset_index().rename(columns={
-                "날짜": "date",
-                "시가": "open",
-                "고가": "high",
-                "저가": "low",
-                "종가": "close",
-                "거래량": "volume",
+                "날짜":"date","시가":"open","고가":"high","저가":"low","종가":"close","거래량":"volume"
             })
             ohlcv['code'] = code
-            ohlcv = ohlcv[['date', 'code', 'open', 'high', 'low', 'close', 'volume']]
+            ohlcv = ohlcv[['date','code','open','high','low','close','volume']]
             ohlcv['date'] = pd.to_datetime(ohlcv['date'])
 
-            periods = df[df['code'] == code][['orig_start','orig_end']]
-            mask = pd.Series(False, index=ohlcv.index)
+            periods = df[df['code']==code][['orig_start','orig_end']]
+            mask = pd.Series(False,index=ohlcv.index)
+
             for _, p in periods.iterrows():
                 orig_start = pd.to_datetime(p['orig_start'])
                 orig_end = pd.to_datetime(p['orig_end'])
-                mask |= (ohlcv['date'] >= orig_start) & (ohlcv['date'] <= orig_end)
-            ohlcv = ohlcv[mask]
+                mask |= (ohlcv['date']>=orig_start)&(ohlcv['date']<=orig_end)
 
+            ohlcv = ohlcv[mask]
             all_dfs.append(ohlcv)
 
         final_df = pd.concat(all_dfs, ignore_index=True)
-        final_df = final_df.sort_values(['date', 'code']).reset_index(drop=True)
+        final_df = final_df.sort_values(['date','code']).reset_index(drop=True)
         return final_df
+
 
     def getohlcv(self, tickers=list, start_date=str, end_date=str):
         """
-        Generate a long-format OHLCV DataFrame for a list of tickers over a specified date range.
+        Retrieve OHLCV data for tickers within a date range.
 
         Parameters
         ----------
-        tickers : list of str
-            List of ticker codes to query.
+        tickers : list[str]
         start_date : str
-            Start date in "YYYYMMDD" format.
         end_date : str
-            End date in "YYYYMMDD" format.
 
         Returns
         -------
         pd.DataFrame
-            Long-format OHLCV DataFrame with columns: date, code, open, high, low, close, volume.
-
-        Behavior
-        --------
-        1. Creates a temporary DataFrame containing each ticker and the start/end dates.
-        2. Calls get_combined_ohlcv to fetch and combine OHLCV data for all tickers.
-        3. Returns the resulting long-format DataFrame.
         """
         tickers_len = len(tickers)
+
         com_df = pd.DataFrame({
             "code": tickers,
             "start": [start_date]*tickers_len,
             "end": [end_date]*tickers_len
         })
-        df = self.get_combined_ohlcv(com_df)
+
+        df = self.generateohlcv(com_df)
         return df
+
+
     def getIndexDeposit(self, ticker=str, start_date=str, end_date=str):
-      """
-      Retrieve component changes for a given index ticker and calculate active periods.
+        """
+        Retrieve OHLCV for index components during their active periods.
 
-      Parameters
-      ----------
-      tickers : list of str
-          List of ticker codes to query.
-      start_date : str
-          Start date in "YYYYMMDD" format.
-      end_date : str
-          End date in "YYYYMMDD" format.
+        Parameters
+        ----------
+        ticker : str
+        start_date : str
+        end_date : str
 
-      Returns
-      -------
-      pd.DataFrame
-          Long-format OHLCV DataFrame with columns: date, code, open, high, low, close, volume.
+        Returns
+        -------
+        pd.DataFrame
+        """
+        pdf = self.generateIndexDeposit(ticker, start_date, end_date)
+        df = self.generateohlcv(pdf)
+        return df
 
-      Behavior
-      --------
-      1. Creates a temporary DataFrame containing each ticker and the start/end dates.
-      2. Calls get_combined_ohlcv to fetch and combine OHLCV data for all tickers.
-      3. Returns the resulting long-format DataFrame.
-      """
-      pdf = self.generateIndexDeposit(ticker, start_date, end_date)
-      df = self.generateohlcv(pdf)
-      return df
 
     def getDepositTickers(self, ticker=str):
-      """
-      """
-      deposit = stock.get_index_portfolio_deposit_file(ticker=ticker)
-      if not deposit:
-        deposit = stock.get_etf_portfolio_deposit_file(ticker=ticker)
-      return deposit
+        """
+        Retrieve current component tickers for index or ETF.
+
+        Parameters
+        ----------
+        ticker : str
+
+        Returns
+        -------
+        list[str]
+        """
+        deposit = stock.get_index_portfolio_deposit_file(ticker=ticker)
+        if not deposit:
+            deposit = stock.get_etf_portfolio_deposit_file(ticker=ticker)
+        return deposit
+
 
     def getETFfromName(self, keyword=str, print_val=False):
-      """
-      """
-      result = []
-      for t, n in list(krx.getName(krx.ETF_list).items()):
-        if keyword in n:
-          result.append([t, n])
-          if print_val:
-            print(t, n)
-      return result
+        """
+        Search ETF tickers whose name contains a keyword.
+
+        Parameters
+        ----------
+        keyword : str
+
+        print_val : bool, default=False
+            If True prints matches.
+
+        Returns
+        -------
+        list[list]
+            [[ticker, name], ...]
+        """
+        result = []
+        for t, n in list(self.getName(self.ETF_list).items()):
+            if keyword in n:
+                result.append([t,n])
+                if print_val:
+                    print(t,n)
+        return result

@@ -3,82 +3,72 @@ import pandas as pd
 import re
 
 class Ecos:
+    '''ECOS API client for requesting, parsing, and aggregating statistical data.'''
+
     def __init__(self, key):
+        '''Store API key used for all ECOS requests.'''
         self.key = key
 
     def requestJson(self, url, print_val=False):
-        """
-            Send an HTTP GET request to the specified URL and return the JSON response.
+        '''
+        Send GET request and return parsed JSON.
 
-            Parameters
-            ----------
-            url : str
-                The full request URL to be sent to the API endpoint.
+        Parameters
+        ----------
+        url : str
+            Full API request URL.
+        print_val : bool
+            If True, prints request URL.
 
-            Returns
-            -------
-            data : dict
-                Parsed JSON response from the server when the request is successful (HTTP status code 200).
+        Returns
+        -------
+        dict
+            Parsed JSON response.
 
-            Behavior
-            --------
-            1. Prints the requested URL to stdout.
-            2. Sends a GET request using the requests library.
-            3. If the response status code is 200:
-                - Parses the response body as JSON and returns it.
-            4. If the request fails:
-                - Prints an error message containing the HTTP status code.
-                - Returns an undefined variable (will raise an error if accessed).
-            """
+        Raises
+        ------
+        ValueError
+            If HTTP response status is not 200.
+        FileExistsError
+            If ECOS API returns INFO-200 error code.
+        '''
         if print_val:
-          print(self, url)
+            print(self, url)
+
         response = requests.get(url)
-        if response.status_code == 200:
-            data = response.json()
-        else:
+        if response.status_code != 200:
             raise ValueError(f"API request failed with status code: {response.status_code}")
 
-        if 'RESULT' in data:
-          if data['RESULT']['CODE'] == 'INFO-200':
-              raise FileExistsError(f'{url} raise error : {data["RESULT"]["MESSAGE"]}')
+        data = response.json()
 
+        if 'RESULT' in data and data['RESULT']['CODE'] == 'INFO-200':
+            raise FileExistsError(f'{url} raise error : {data["RESULT"]["MESSAGE"]}')
 
         return data
 
     def getStatDetail(self, keyword, print_val=False, sub_col=None, col_val=str):
-        """
-        Search ECOS statistical tables whose names contain a given keyword,
-        then retrieve and print detailed item information for each match.
+        '''
+        Search statistics whose names contain keyword and fetch item metadata.
 
         Parameters
         ----------
         keyword : str
-            Keyword used to filter statistic table names. Matching is performed
-            using substring containment against the STAT_NAME field.
+            Substring used to match STAT_NAME.
+        print_val : bool
+            If True, prints matched tables and items.
+        sub_col : str | None
+            Optional column name used to filter item rows.
+        col_val : str
+            Required value when filtering by sub_col.
 
         Returns
         -------
-        data : dict
-            JSON response from the ECOS API containing statistical code and names.
-
-
-        Behavior
-        --------
-        1. Requests the full list of statistical tables from the ECOS API.
-        2. Iterates through all tables and selects those whose STAT_NAME contains
-            the provided keyword.
-        3. Stores matching tables in a dictionary:
-            {stat_name: table_metadata}
-        4. For each matched table:
-            a. Requests its item list using the table's STAT_CODE.
-            b. Prints the table name.
-            c. Prints each item row from the detail response.
-        5. If item retrieval fails or the structure is unexpected:
-            - Prints the original table metadata instead.
-        """
+        dict
+            Mapping of statistic or item names to metadata dictionaries.
+        '''
         url = f"https://ecos.bok.or.kr/api/StatisticTableList/{self.key}/json/kr/1/1000"
         data = self.requestJson(url)
-        
+
         candidate_dict = {}
         for row in data['StatisticTableList']['row']:
             if keyword in row['STAT_NAME']:
@@ -88,157 +78,80 @@ class Ecos:
         for name, val in candidate_dict.items():
             url_d = f"https://ecos.bok.or.kr/api/StatisticItemList/{self.key}/json/kr/1/1000/{val['STAT_CODE']}"
             try:
-              detail = self.requestJson(url_d)
-              if print_val:
-                print(f"{name} : ")
-              for line in detail.get("StatisticItemList")['row']:
-                if sub_col:
-                  if line[sub_col] == col_val:
-                    result[f"{name} - {line['ITEM_NAME']}"] = line
-                    if print_val:
-                      print(f"    {line}") 
-                else:
-                  result[f"{name} - {line['ITEM_NAME']}"] = line
-                  if print_val:
-                    print(f"    {line}") 
+                detail = self.requestJson(url_d)
+                if print_val:
+                    print(f"{name} : ")
+
+                for line in detail.get("StatisticItemList")['row']:
+                    if sub_col:
+                        if line[sub_col] == col_val:
+                            result[f"{name} - {line['ITEM_NAME']}"] = line
+                            if print_val:
+                                print(f"    {line}")
+                    else:
+                        result[f"{name} - {line['ITEM_NAME']}"] = line
+                        if print_val:
+                            print(f"    {line}")
             except:
-              pass
+                pass
+
             result[name] = val
             if print_val:
-              print(f"    {val}")
+                print(f"    {val}")
+
         return result
 
-
     def generateECOSData(self, code=list, period="D", start_date="20200101", end_date="20251101"):
-        """
-        Retrieve statistical time series data from the ECOS API for a given code
-        and date range.
+        '''
+        Request raw time-series data from ECOS API.
 
         Parameters
         ----------
         code : list
-            A list containing one or two code identifiers:
-                [code1]              → basic query
-                [code1, code2]       → query with sub-item classification
-            If more than two elements are provided, an exception is raised.
-
-        period : str, optional, default="D"
-            Data frequency code. Common values:
-                "A"  : annual
-                "Q"  : quarterly
-                "M"  : monthly
-                "D"  : daily
-                "S"  : semiannual
-                "SM" : semimonthly
-
-        start_date : str, optional, default="20200101"
-            Start date of the query period. Format must match the selected
-            period type.
-
-        end_date : str, optional, default="20251101"
-            End date of the query period. Format must match the selected
-            period type.
+            [stat_code] or [stat_code, item_code].
+        period : str
+            Frequency code ("A","Q","M","D","S","SM").
+        start_date : str
+            Query start date formatted for selected period.
+        end_date : str
+            Query end date formatted for selected period.
 
         Returns
         -------
-        data : dict
-            JSON response from the ECOS API containing statistical time series data.
+        dict
+            Raw JSON response.
 
         Raises
         ------
         Exception
-            If more than two codes are provided in the `code` list.
-
-        FileExistsError
-            If the API returns an INFO-200 result code indicating that the
-            request failed or returned no valid data.
-
-        Behavior
-        --------
-        1. Determines whether the query uses:
-            - a single statistic code, or
-            - a statistic code with a sub-item code.
-        2. Builds the appropriate ECOS API request URL.
-        3. Sends the request using `get_req()`.
-        4. Checks the API response:
-            - If a RESULT field exists and its CODE is "INFO-200",
-                raises an error with the API message.
-        5. Returns the raw JSON response.
-
-        Notes
-        -----
-        - Uses a maximum row limit of 100000 per request.
-        - Requires a valid API key stored in global variable `KEY`.
-        - The function does not validate date format correctness beyond passing
-            it directly to the API.
-        - A debug value (12314) is printed before raising the error condition.
-        """
+            If more than two codes are supplied.
+        '''
         if len(code) == 1:
-            code1 = code[0]
-            code2= None
+            code1, code2 = code[0], None
         elif len(code) == 2:
-            code1 = code[0]
-            code2 = code[1]
+            code1, code2 = code
         else:
             raise Exception(f"len of code is more than 2 : {len(code)}")
 
-        if code2 == None:
+        if code2 is None:
             url = f"https://ecos.bok.or.kr/api/StatisticSearch/{self.key}/json/kr/1/100000/{code1}/{period}/{start_date}/{end_date}"
         else:
             url = f"https://ecos.bok.or.kr/api/StatisticSearch/{self.key}/json/kr/1/100000/{code1}/{period}/{start_date}/{end_date}/{code2}"
 
-        data = self.requestJson(url)
-
-
-        return data
+        return self.requestJson(url)
 
     def parseTime(self, val):
-        """
-        Parse a time string from ECOS statistical data into a pandas Timestamp.
+        '''
+        Convert ECOS time string into pandas Timestamp.
 
-        Parameters
-        ----------
-        val : str or int
-            Time value in one of several ECOS-supported formats. Supported patterns:
-
-            YYYY            → yearly
-            YYYYMM          → monthly
-            YYYYMMDD        → daily
-            YYYYQn          → quarterly (n = 1–4)
-            YYYYSn          → semiannual (n = 1–2)
-            YYYYMMSn      → semimonthly (n = 1–2; internally formatted as YYYYMM S1/S2)
+        Supports yearly, monthly, daily, quarterly,
+        semiannual, and semimonthly formats.
 
         Returns
         -------
-        pandas.Timestamp or pandas.NaT
-            Parsed timestamp representing the beginning of the corresponding period.
-            Returns pandas.NaT if the input does not match any recognized format.
-
-        Parsing Rules
-        -------------
-        - Year only → January 1 of that year.
-        - Month → first day of month.
-        - Day → exact date.
-        - Quarter → first day of first month in quarter:
-            Q1 → Jan 1
-            Q2 → Apr 1
-            Q3 → Jul 1
-            Q4 → Oct 1
-        - Semiannual → first day of first month in half:
-            S1 → Jan 1
-            S2 → Jul 1
-        - Semimonthly:
-            S1 → 1st day of month
-            S2 → 16th day of month
-
-        Notes
-        -----
-        - Input is converted to string before parsing.
-        - Regex matching is strict and must match the entire string.
-        - The function is designed specifically for ECOS time format conventions.
-        """
-
-        time_pattern = re.compile(r"""
+        pandas.Timestamp | pandas.NaT
+        '''
+        pattern = re.compile(r"""
             ^
             (?P<y>\d{4})
             (?:
@@ -254,25 +167,22 @@ class Ecos:
                 S(?P<s>[12])
             )?
             $
-        """, 
-        re.X)
-        m = time_pattern.match(str(val))
+        """, re.X)
+
+        m = pattern.match(str(val))
         if not m:
             return pd.NaT
 
         y = int(m["y"])
 
         if m["q"]:
-            month = (int(m["q"]) - 1) * 3 + 1
-            return pd.Timestamp(y, month, 1)
+            return pd.Timestamp(y, (int(m["q"]) - 1) * 3 + 1, 1)
 
         if m["s"]:
-            month = (int(m["s"]) - 1) * 6 + 1
-            return pd.Timestamp(y, month, 1)
+            return pd.Timestamp(y, (int(m["s"]) - 1) * 6 + 1, 1)
 
         if m["sm"]:
-            day = 1 if m["sm"] == "1" else 16
-            return pd.Timestamp(y, int(m["m"]), day)
+            return pd.Timestamp(y, int(m["m"]), 1 if m["sm"] == "1" else 16)
 
         if m["d"]:
             return pd.Timestamp(y, int(m["m"]), int(m["d"]))
@@ -283,71 +193,30 @@ class Ecos:
         return pd.Timestamp(y, 1, 1)
 
     def processECOSData(self, data=dict):
-        """
-        Process raw ECOS statistical API response data into a structured DataFrame
-        and extract metadata describing the statistic.
+        '''
+        Transform raw ECOS response into structured DataFrame.
 
         Parameters
         ----------
         data : dict
-            Raw JSON-like response returned from the ECOS statistic search API.
-            Expected structure:
-            {
-                "StatisticSearch": {
-                    "row": [ {...}, {...}, ... ]
-                }
-            }
+            JSON returned from StatisticSearch API.
 
         Returns
         -------
-        df : pandas.DataFrame
-            A DataFrame indexed by parsed time values.
-            Columns represent statistic values.
-            If item category columns exist, each category becomes a separate column.
-            Otherwise, a single column is returned using the statistic name.
-
-        data_detail : dict
-            Dictionary containing metadata describing the statistic:
-                - stat_code : str - Statistic code identifier.
-                - stat_name : str - Cleaned statistic name (numeric prefixes removed).
-                - unit_name : str - Measurement unit.
-
-        Behavior
-        --------
-        1. Extracts row data from the API response.
-        2. Returns empty results if no rows are present.
-        3. Builds metadata using the first row.
-        4. Converts:
-            - TIME → parsed datetime using `parse_time`
-            - DATA_VALUE → numeric (invalid values become NaN)
-        5. Detects the deepest available item name column among:
-            ITEM_NAME4 → ITEM_NAME3 → ITEM_NAME2 → ITEM_NAME1
-        6. If no item name column exists:
-            - Returns a single-column DataFrame indexed by TIME.
-        7. If item name column exists:
-            - Pivots the table so each item becomes a column.
-            - Column names are formatted as:
-                "{stat_name}_{item}"
-            (or just stat_name if item label is empty)
-
-        Notes
-        -----
-        - The statistic name is cleaned using regex to remove leading numbering
-        such as "1. ", "01 ", etc.
-        - Pivot aggregation uses `first` to resolve duplicate values.
-        - Output is sorted chronologically by TIME index.
-        """
+        DataFrame
+            Time-indexed values.
+        dict
+            Metadata describing statistic.
+        '''
         rows = data.get("StatisticSearch", {}).get("row", [])
         if not rows:
             return pd.DataFrame(), {}
 
         first = rows[0]
-        stat_name = first["STAT_NAME"]
-        stat_name = re.sub(r'^[\d\.]+\s*', '', stat_name)
-        data_detail = rows[0]
+        stat_name = re.sub(r'^[\d\.]+\s*', '', first["STAT_NAME"])
+        data_detail = first
 
         df = pd.DataFrame(rows)
-
         df["TIME"] = df["TIME"].map(self.parseTime)
         df["DATA_VALUE"] = pd.to_numeric(df["DATA_VALUE"], errors="coerce")
 
@@ -362,55 +231,44 @@ class Ecos:
 
         df["col"] = df[name_col].astype(str).str.strip()
 
-        df = df.pivot_table(index="TIME", columns="col", values="DATA_VALUE", aggfunc="first").sort_index()
+        df = df.pivot_table(
+            index="TIME",
+            columns="col",
+            values="DATA_VALUE",
+            aggfunc="first"
+        ).sort_index()
 
         df.columns = [stat_name if c == "" else f"{stat_name}_{c}" for c in df.columns]
 
         return df, data_detail
 
     def getECOSData(self, codes, method="value", start_date="20230101", end_date="20260101", return_detail=False):
-
-        """
-        Retrieve and aggregate statistical data from the ECOS API for multiple codes.
+        '''
+        Download and merge multiple ECOS statistics.
 
         Parameters
         ----------
-        codes : list of tuple
-            A list where each element is structured as (period_code, code_data).
-            period_code determines the data frequency and must be one of:
-            "A" (annual), "Q" (quarterly), "M" (monthly), "D" (daily), "S" (semiannual), "SM" (semimonthly).
-            code_data is passed directly to the ECOS query function.
-
-        method : str, optional, default="value"
-            Reserved parameter for future functionality. Currently not used.
-
-        start_date : str, optional, default="20230101", format="YYYYMMDD"
-
-        end_date : str, optional, default="20260101", format="YYYYMMDD"
+        codes : list[tuple]
+            Each element = (period_code, code_list).
+        method : str
+            Reserved parameter (unused).
+        start_date : str
+            YYYYMMDD.
+        end_date : str
+            YYYYMMDD.
+        return_detail : bool
+            If True, also return metadata.
 
         Returns
         -------
-        (df, details)
-        df : pandas.DataFrame
-            A DataFrame containing all retrieved statistics merged column-wise.
-            The index is reset before returning.
-
-        details : dict
-            Dictionary mapping each primary code identifier to its corresponding
-            metadata or detail information returned from processing.
+        DataFrame | (DataFrame, dict)
+            Combined dataset and optional details.
 
         Raises
         ------
         ValueError
-            If a provided period_code is not supported.
-
-        Behavior
-        -----
-        1. Date strings are converted automatically to match the format required by each period type.
-        2. Data retrieval is performed using `get_data_ecos_stat_search`.
-        3. Retrieved data is processed using `process_data_stat_search`.
-        4. All resulting DataFrames are concatenated along columns.
-        """
+            If unsupported period code.
+        '''
         period_map = {
             "A": lambda d: d[:4],
             "Q": lambda d: d[:4] + "Q1",
@@ -424,59 +282,81 @@ class Ecos:
         details = {}
 
         for code in codes:
-            per = code[0]
-            code_data = code[1]
+            per, code_data = code
 
             if per not in period_map:
                 raise ValueError(f"period is not valid: {per}")
 
             start_var = period_map[per](start_date)
-            end_var   = period_map[per](end_date)
+            end_var = period_map[per](end_date)
 
             try:
-              data = self.generateECOSData(code=code_data, period=per, start_date=start_var, end_date=end_var)
-              processed_data, detail = self.processECOSData(data)
-              dfs.append(processed_data)
-              details[code[1][0]] = detail
+                data = self.generateECOSData(code=code_data, period=per, start_date=start_var, end_date=end_var)
+                processed_data, detail = self.processECOSData(data)
+                dfs.append(processed_data)
+                details[code_data[0]] = detail
             except:
-              print(f"fail to download {code_data} - {per} - {start_var} - {end_var}")
+                print(f"fail to download {code_data} - {per} - {start_var} - {end_var}")
 
-        df = pd.concat(dfs, axis=1)
-        df = df.reset_index()
-        df = df.rename(columns={"TIME":"date"})
-        if return_detail:
-          return df, details
-        else:
-          return df
+        df = pd.concat(dfs, axis=1).reset_index().rename(columns={"TIME":"date"})
+
+        return (df, details) if return_detail else df
 
     def getCode(self, code_dict=dict, include_subcols=True):
-      if code_dict['CYCLE'] == None:
-        pcode = code_dict['P_STAT_CODE']
-        url = f"https://ecos.bok.or.kr/api/StatisticTableList/{self.key}/json/kr/1/1000"
-        data = self.requestJson(url)
+        '''
+        Convert ECOS metadata dict into request tuple.
 
-        for row in data['StatisticTableList']['row']:
-            if row['CYCLE']!= None:
-              cycle_val = row['CYCLE']
-              continue  
-        result = [cycle_val, [code_dict['STAT_CODE']]]
-        
-      else:
-        cycle_val = code_dict['CYCLE']
+        Parameters
+        ----------
+        code_dict : dict
+            Metadata row describing statistic.
+        include_subcols : bool
+            Whether to include sub-item codes.
 
-      if 'ITEM_CODE' in code_dict.keys():
-        result = [cycle_val, [code_dict['STAT_CODE'], code_dict['ITEM_CODE']]]
-      else:
-        if include_subcols:
-          result = [cycle_val, [code_dict['STAT_CODE']]]
+        Returns
+        -------
+        list | None
+            [period, [codes]] or None if excluded.
+        '''
+        if code_dict['CYCLE'] is None:
+            url = f"https://ecos.bok.or.kr/api/StatisticTableList/{self.key}/json/kr/1/1000"
+            data = self.requestJson(url)
+
+            for row in data['StatisticTableList']['row']:
+                if row['CYCLE'] is not None:
+                    cycle_val = row['CYCLE']
+                    continue
+
+            result = [cycle_val, [code_dict['STAT_CODE']]]
         else:
-          result = None
-      return result
+            cycle_val = code_dict['CYCLE']
+
+        if 'ITEM_CODE' in code_dict:
+            result = [cycle_val, [code_dict['STAT_CODE'], code_dict['ITEM_CODE']]]
+        else:
+            result = [cycle_val, [code_dict['STAT_CODE']]] if include_subcols else None
+
+        return result
 
     def getCodes(self, codes_dict=dict, include_subcols=True):
-      result = []
-      for code_dict in codes_dict.values():
-        req = self.getCode(code_dict, include_subcols=include_subcols)
-        if not req == None:
-          result.append(req)
-      return result
+        '''
+        Convert multiple metadata rows into request list.
+
+        Parameters
+        ----------
+        codes_dict : dict
+            Mapping of names → metadata dict.
+        include_subcols : bool
+            Include sub-item codes.
+
+        Returns
+        -------
+        list
+            List of request tuples usable in getECOSData().
+        '''
+        result = []
+        for code_dict in codes_dict.values():
+            req = self.getCode(code_dict, include_subcols=include_subcols)
+            if req is not None:
+                result.append(req)
+        return result
