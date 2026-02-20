@@ -26,24 +26,22 @@ class Krx:
         Fetches ticker lists, index lists, sector classifications,
         ETF lists, and determines the most recent business day.
         """
-        from pykrx import stock
-        self.stock = stock
-        self.last_Bday = self.stock.get_nearest_business_day_in_a_week()
+        self.last_Bday = stock.get_nearest_business_day_in_a_week()
 
-        self.KOSPI_stocks = self.stock.get_market_ticker_list(market="KOSPI")
-        self.KOSDAQ_stocks = self.stock.get_market_ticker_list(market="KOSDAQ")
-        self.KRX_stocks = self.stock.get_market_ticker_list(market="KONEX")
-        self.ALL_stocks = self.stock.get_market_ticker_list(market="ALL")
+        self.KOSPI_stocks = stock.get_market_ticker_list(market="KOSPI")
+        self.KOSDAQ_stocks = stock.get_market_ticker_list(market="KOSDAQ")
+        self.KRX_stocks = stock.get_market_ticker_list(market="KONEX")
+        self.ALL_stocks = stock.get_market_ticker_list(market="ALL")
 
-        self.KOSPI_idx = self.stock.get_index_ticker_list(market="KOSPI")
-        self.KOSDAQ_idx = self.stock.get_index_ticker_list(market="KOSDAQ")
-        self.KRX_idx = self.stock.get_index_ticker_list(market="KRX")
-        self.theme_idx = self.stock.get_index_ticker_list(market="테마")
+        self.KOSPI_idx = stock.get_index_ticker_list(market="KOSPI")
+        self.KOSDAQ_idx = stock.get_index_ticker_list(market="KOSDAQ")
+        self.KRX_idx = stock.get_index_ticker_list(market="KRX")
+        self.theme_idx = stock.get_index_ticker_list(market="테마")
 
-        self.KOSPI_sector = self.stock.get_market_sector_classifications(date=self.last_Bday, market="KOSPI")
-        self.KOSDAQ_sector = self.stock.get_market_sector_classifications(date=self.last_Bday, market="KOSDAQ")
+        self.KOSPI_sector = stock.get_market_sector_classifications(date=self.last_Bday, market="KOSPI")
+        self.KOSDAQ_sector = stock.get_market_sector_classifications(date=self.last_Bday, market="KOSDAQ")
 
-        self.ETF_list = self.stock.get_etf_ticker_list()
+        self.ETF_list = stock.get_etf_ticker_list()
 
 
     def getName(self, tickers=list, print_names=False):
@@ -73,12 +71,12 @@ class Krx:
         result = {}
         for ticker in tickers:
             try:
-                result[ticker] = self.stock.get_etf_ticker_name(ticker)
+                result[ticker] = stock.get_etf_ticker_name(ticker)
             except:
                 try:
-                    result[ticker] = self.stock.get_index_ticker_name(ticker)
+                    result[ticker] = stock.get_index_ticker_name(ticker)
                 except:
-                    result[ticker] = self.stock.get_market_ticker_name(ticker)
+                    result[ticker] = stock.get_market_ticker_name(ticker)
 
             if print_names:
                 print(ticker, result[ticker])
@@ -185,7 +183,7 @@ class Krx:
         for d in dates:
             date_str = d.strftime("%Y%m%d")
             try:
-                cur_set = set(self.stock.get_index_portfolio_deposit_file(ticker=ticker, date=date_str))
+                cur_set = set(stock.get_index_portfolio_deposit_file(ticker=ticker, date=date_str))
             except:
                 continue
 
@@ -277,7 +275,7 @@ class Krx:
             start = row['start']
             end = row['end']
 
-            ohlcv = self.stock.get_market_ohlcv_by_date(start, end, code)
+            ohlcv = stock.get_market_ohlcv_by_date(start, end, code)
 
             ohlcv = ohlcv.reset_index().rename(columns={
                 "날짜":"date","시가":"open","고가":"high","저가":"low","종가":"close","거래량":"volume"
@@ -359,9 +357,9 @@ class Krx:
         -------
         list[str]
         """
-        deposit = self.stock.get_index_portfolio_deposit_file(ticker=ticker)
+        deposit = stock.get_index_portfolio_deposit_file(ticker=ticker)
         if not deposit:
-            deposit = self.stock.get_etf_portfolio_deposit_file(ticker=ticker)
+            deposit = stock.get_etf_portfolio_deposit_file(ticker=ticker)
         return deposit
 
 
