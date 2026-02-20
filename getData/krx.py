@@ -1,6 +1,7 @@
 import pandas as pd
 import ast
 from datetime import datetime
+from pykrx import stock
 
 class Krx:
     """
