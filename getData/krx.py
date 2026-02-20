@@ -1,7 +1,6 @@
 import pandas as pd
 import ast
 from datetime import datetime
-from pykrx import stock
 
 class Krx:
     """
@@ -27,6 +26,7 @@ class Krx:
         Fetches ticker lists, index lists, sector classifications,
         ETF lists, and determines the most recent business day.
         """
+        from pykrx import stock
         self.last_Bday = stock.get_nearest_business_day_in_a_week()
 
         self.KOSPI_stocks = stock.get_market_ticker_list(market="KOSPI")
