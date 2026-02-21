@@ -74,7 +74,7 @@ class Dart:
       result = self.corpCode[self.corpCode[col].str.contains(keyword, na=False)]
 
     if len(result) == 1:
-      corp_code = df.loc[df[col] == keyword, 'corp_code'].iloc[0]
+      corp_code = self.corpCode.loc[self.corpCode[col] == keyword, 'corp_code'].iloc[0]
 
     return result
 

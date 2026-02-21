@@ -16,7 +16,7 @@ package_path = [n + ".*" for n in package_names]
 
 setup(
     name="utils",
-    version="0.4.15",
+    version="0.4.16",
     packages=find_packages(include=package_names + package_path),
     include_package_data=True,
     install_requires=requirements,
