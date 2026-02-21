@@ -253,7 +253,7 @@ class Fred():
     return data.get('seriess')
 
 
-  def generateFredData(self, series_id):
+  def generateFredData(self, series_id, start_date=start_date, end_date=end_date):
     """
     Retrieve observation data for a series.
 
@@ -270,7 +270,9 @@ class Fred():
     params = {
         "api_key" : self.api_key,
         "file_type" : "json",
-        "series_id" : series_id
+        "series_id" : series_id,
+        'observation_start' : start_date,
+        'observation_end' : end_date
     }
 
     data = self.request(url, params=params)
@@ -315,7 +317,7 @@ class Fred():
     dfs = []
     for code in codes:
 
-      data = self.generateFredData(code)
+      data = self.generateFredData(code, start_date=start_date, end_date=end_date)
       dfs.append(data)
     result = pd.concat(dfs, axis=1)
     result.reset_index(inplace=True)
