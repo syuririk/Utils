@@ -253,7 +253,7 @@ class Fred():
     return data.get('seriess')
 
 
-  def generateFredData(self, series_id, start_date=start_date, end_date=end_date):
+  def generateFredData(self, series_id, start_date, end_date):
     """
     Retrieve observation data for a series.
 
