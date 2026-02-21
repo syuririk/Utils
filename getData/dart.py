@@ -63,18 +63,18 @@ class Dart:
     df.to_csv('corpcode.csv')
     return df
 
-  def searchCode(self, keywork, col='corp_name', search_type='eq'):
+  def searchCode(self, keyword, col='corp_name', search_type='eq'):
     '''
       col : corp_code	corp_name	corp_eng_name	stock_code	modify_date
       type : eq, in
     '''
     if search_type == 'eq':
-      result = Dart.corpCode[Dart.corpCode[col]==keywork]
+      result = self.corpCode[self.corpCode[col]==keyword]
     elif search_type == 'in':
-      result = self.corpCode[self.corpCode[col].str.contains(keywork, na=False)]
+      result = self.corpCode[self.corpCode[col].str.contains(keyword, na=False)]
 
     if len(result) == 1:
-      corp_code = df.loc[df[col] == keywork, 'corp_code'].iloc[0]
+      corp_code = df.loc[df[col] == keyword, 'corp_code'].iloc[0]
 
     return result
 
