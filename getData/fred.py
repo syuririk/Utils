@@ -51,10 +51,13 @@ class Fred():
         If JSON parsing fails.
     """
     if print_url:
-      params_str = url + '?'
-      for k, v in params.items():
-        params_str += f'{k}={v}&'
-      print(url+params_str)
+      if params=None:
+        print(url)
+      else:
+        params_str = url + '?'
+        for k, v in params.items():
+          params_str += f'{k}={v}&'
+        print(url+params_str)
 
   
 
