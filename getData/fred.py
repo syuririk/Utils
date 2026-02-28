@@ -51,7 +51,7 @@ class Fred():
         If JSON parsing fails.
     """
     if print_url:
-      if params=None:
+      if params==None:
         print(url)
       else:
         params_str = url + '?'
